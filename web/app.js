@@ -282,11 +282,28 @@ function renderResult(result) {
     <div class="result-head"><div><p class="eyebrow">GROUNDED RESPONSE</p><h2>回答</h2></div><span class="result-badge ${badgeClass}">${status}</span></div>
     <div class="answer">${renderMarkdown(result.answer)}</div>
     ${result.reason ? `<div class="reason">${escapeHtml(result.reason)}</div>` : ""}
+    ${renderSufficiency(result.sufficiency)}
     <div class="metrics">${metric("检索", timing.retrieval_seconds)}${metric("生成", timing.generation_seconds)}${metric("总计", timing.total_seconds)}<div class="metric"><small>引用校验</small><strong>${citationLabel}</strong></div></div>
     ${evidence.length ? `<h3 class="evidence-title">引用证据</h3>${renderEvidence(evidence, true)}` : ""}${candidateNote}`;
 }
 
 function metric(label, value = 0) { return `<div class="metric"><small>${label}</small><strong>${Number(value).toFixed(2)}s</strong></div>`; }
+
+function renderSufficiency(sufficiency) {
+  if (!sufficiency || !Array.isArray(sufficiency.signals)) return "";
+  const parts = sufficiency.signals.map((item) => {
+    const points = Number(item.points || 0).toFixed(2);
+    const direction = escapeHtml(item.direction_label || "");
+    return `${escapeHtml(item.label || item.signal)} ${points}（${direction}）`;
+  }).join(" + ");
+  const missing = sufficiency.coverage?.missing?.length
+    ? ` · 证据未覆盖：${sufficiency.coverage.missing.map((item) => escapeHtml(item)).join("、")}`
+    : "";
+  const verdict = sufficiency.sufficient ? "充分" : "不足";
+  const score = Number(sufficiency.score || 0).toFixed(2);
+  const threshold = Number(sufficiency.threshold || 0).toFixed(2);
+  return `<div class="sufficiency">证据充分度 ${score} / ${threshold}（${verdict}，参考，不参与拒答）· ${parts}${missing}</div>`;
+}
 
 function renderEvidence(items, accepted) {
   return `<div class="evidence-grid">${items.map((item, index) => {
