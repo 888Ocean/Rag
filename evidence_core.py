@@ -18,24 +18,17 @@ from llama_index.core.node_parser import SentenceSplitter
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.openai_like import OpenAILike
 
+from sufficiency import (
+    DEFAULT_CONFIG,
+    PRODUCTION_MIN_SCORE,
+    dense_evidence,
+    measure,
+    tokenize,
+)
+
 
 ProgressCallback = Callable[[int, str], None]
 REFUSAL = "资料不足，无法根据现有证据确认。"
-
-
-def _tokenize(text: str) -> list[str]:
-    text = text.lower()
-    tokens = re.findall(r"[a-z0-9]+|[\u4e00-\u9fff]+", text)
-    output: list[str] = []
-    for token in tokens:
-        if re.fullmatch(r"[\u4e00-\u9fff]+", token):
-            if len(token) == 1:
-                output.append(token)
-            else:
-                output.extend(token[i : i + 2] for i in range(len(token) - 1))
-        else:
-            output.append(token)
-    return output
 
 
 class BM25Index:
@@ -43,7 +36,7 @@ class BM25Index:
         self.nodes = nodes
         self.k1 = k1
         self.b = b
-        self.tokens = [_tokenize(node.text) for node in nodes]
+        self.tokens = [tokenize(node.text) for node in nodes]
         self.lengths = [len(tokens) for tokens in self.tokens]
         self.avg_length = sum(self.lengths) / max(len(self.lengths), 1)
         self.term_frequencies = [Counter(tokens) for tokens in self.tokens]
@@ -59,7 +52,7 @@ class BM25Index:
     def search(
         self, query: str, limit: int, allowed_ids: set[str] | None = None
     ) -> list[tuple[str, float]]:
-        query_tokens = _tokenize(query)
+        query_tokens = tokenize(query)
         ranked: list[tuple[str, float]] = []
         for node, frequencies, length in zip(
             self.nodes, self.term_frequencies, self.lengths
@@ -414,7 +407,7 @@ class EvidenceCopilot:
         self,
         question: str,
         top_k: int = 4,
-        min_score: float = 0.60,
+        min_score: float = PRODUCTION_MIN_SCORE,
         progress: ProgressCallback | None = None,
         section_id: str | None = None,
         retrieval_mode: str = "hybrid",
@@ -426,12 +419,7 @@ class EvidenceCopilot:
             candidates, retrieval_seconds = self.retrieve(
                 question, top_k, progress, section_id, retrieval_mode
             )
-            evidence = [
-                item
-                for item in candidates
-                if item["dense_score"] is not None
-                and item["dense_score"] >= min_score
-            ]
+            evidence = dense_evidence(candidates, min_score)
             best_dense = max(
                 (item["dense_score"] or 0.0 for item in candidates), default=0.0
             )
@@ -450,11 +438,16 @@ class EvidenceCopilot:
                         "total_seconds": round(time.perf_counter() - total_started, 3),
                     },
                 }
-                progress(100, "证据不足，已安全拒答")
-                self._write_log(
-                    question, top_k, min_score, result, section_id, retrieval_mode
+                return self._finish(
+                    question,
+                    top_k,
+                    min_score,
+                    result,
+                    section_id,
+                    retrieval_mode,
+                    progress,
+                    "证据不足，已安全拒答",
                 )
-                return result
 
             evidence_blocks = []
             for index, item in enumerate(evidence, 1):
@@ -505,11 +498,34 @@ class EvidenceCopilot:
                     "total_seconds": round(time.perf_counter() - total_started, 3),
                 },
             }
-            self._write_log(
-                question, top_k, min_score, result, section_id, retrieval_mode
+            return self._finish(
+                question,
+                top_k,
+                min_score,
+                result,
+                section_id,
+                retrieval_mode,
+                progress,
+                "回答完成",
             )
-            progress(100, "回答完成")
-            return result
+
+    def _finish(
+        self,
+        question: str,
+        top_k: int,
+        min_score: float,
+        result: dict,
+        section_id: str | None,
+        retrieval_mode: str,
+        progress: ProgressCallback,
+        message: str,
+    ) -> dict:
+        result["sufficiency"] = (
+            measure(question, result["candidates"]).assess(DEFAULT_CONFIG).to_dict()
+        )
+        self._write_log(question, top_k, min_score, result, section_id, retrieval_mode)
+        progress(100, message)
+        return result
 
     def _write_log(
         self,
