@@ -1,0 +1,4 @@
+python-dotenv==1.2.2
+llama-index-core==0.14.23
+llama-index-embeddings-huggingface==0.7.0
+llama-index-llms-openai-like==0.7.2

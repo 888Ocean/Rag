@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Evidence Copilot</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header>
+        <div>
+          <p class="eyebrow">LOCAL RAG WORKSPACE</p>
+          <h1>Evidence Copilot</h1>
+          <p class="subtitle">每个答案，都能回到原始证据。</p>
+        </div>
+        <div class="status"><span id="statusDot"></span><span id="serverStatus">正在连接本地服务</span></div>
+      </header>
+
+      <nav class="workspace-tabs" aria-label="工作区切换">
+        <button class="workspace-tab active" type="button" data-view="qaView">问答工作台</button>
+        <button class="workspace-tab" type="button" data-view="evalView">评测中心 <span class="new-dot"></span></button>
+      </nav>
+
+      <section id="progressPanel" class="progress-panel hidden" aria-live="polite">
+        <div class="progress-copy"><span id="progressMessage">正在准备</span><span id="progressValue">0%</span></div>
+        <div class="progress-track"><div id="progressBar"></div></div>
+      </section>
+
+      <div id="qaView" class="layout workspace-view">
+        <aside>
+          <section class="panel upload-panel">
+            <div class="section-title"><span>01</span><h2>知识资料库</h2><button id="newSectionButton" class="mini-action" type="button">＋ 新建分区</button></div>
+            <label class="dropzone" id="dropzone">
+              <input id="fileInput" type="file" multiple accept=".txt,.md,.pdf,.docx,.csv" />
+              <span class="upload-icon">↑</span>
+              <strong>上传或拖入文档</strong>
+              <small>TXT · MD · PDF · DOCX · CSV，单次不超过 30 MB</small>
+            </label>
+            <label class="compact-field">上传到
+              <select id="uploadSection"><option value="unclassified">未分类</option></select>
+            </label>
+            <div class="toolbar">
+              <button id="uploadButton" class="secondary">上传并建立索引</button>
+              <button id="rebuildButton" class="text-button">重建</button>
+            </div>
+            <div id="selectedFiles" class="selected-files"></div>
+            <div class="document-heading"><span>知识分区</span><span><b id="sectionCount">1</b> 区 · <b id="documentCount">0</b> 文档</span></div>
+            <div id="sectionList" class="section-list"></div>
+          </section>
+
+          <section class="panel settings-panel">
+            <div class="section-title"><span>02</span><h2>检索设置</h2></div>
+            <label>候选片段 Top-K <output id="topKValue">4</output>
+              <input id="topK" type="range" min="1" max="10" value="4" />
+            </label>
+            <label>语义拒答阈值 <output id="thresholdValue">0.60</output>
+              <input id="threshold" type="range" min="0" max="1" step="0.01" value="0.60" />
+            </label>
+            <p class="hint">混合排序采用向量检索 + BM25；拒答阈值只看语义分数。</p>
+          </section>
+        </aside>
+
+        <main>
+          <section class="ask-panel">
+            <div class="section-title"><span>03</span><h2>提出问题</h2></div>
+            <textarea id="question" rows="3" placeholder="例如：深度烘焙豆应该如何调整研磨度？"></textarea>
+            <div class="ask-actions">
+              <label class="query-scope">检索范围
+                <select id="querySection"><option value="all">全部分区</option></select>
+              </label>
+              <span class="shortcut">⌘ / Ctrl + Enter</span>
+              <button id="askButton" class="primary">检索并生成答案 <span>→</span></button>
+            </div>
+          </section>
+
+          <section id="resultPanel" class="result-panel empty">
+            <div class="empty-state">
+              <div class="empty-mark">E</div>
+              <h2>等待一个问题</h2>
+              <p>系统会检索资料、检查证据充足度，再生成带引用的回答。</p>
+            </div>
+          </section>
+
+          <section class="log-panel">
+            <div class="section-title"><span>04</span><h2>最近运行</h2><button id="refreshLogs" class="text-button">刷新</button></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>时间</th><th>问题</th><th>状态</th><th>检索</th><th>生成</th><th>总计</th></tr></thead>
+                <tbody id="logBody"><tr><td colspan="6">暂无记录</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+        </main>
+      </div>
+
+      <div id="evalView" class="eval-view workspace-view hidden">
+        <section class="eval-intro">
+          <div>
+            <p class="eyebrow">RAG EVALUATION LAB</p>
+            <h2>用固定问题，测出检索与拒答边界</h2>
+            <p>对比向量、BM25 和混合排序，记录 Hit@K、MRR、拒答准确率与耗时。</p>
+          </div>
+          <div class="eval-count"><strong id="evalCaseCount">0</strong><span>启用用例</span></div>
+        </section>
+
+        <section class="eval-config panel">
+          <div class="section-title"><span>05</span><h2>评测配置</h2></div>
+          <div class="eval-config-grid">
+            <fieldset><legend>检索方式</legend>
+              <label><input type="checkbox" name="evalMode" value="vector" /> 向量</label>
+              <label><input type="checkbox" name="evalMode" value="bm25" /> BM25</label>
+              <label><input type="checkbox" name="evalMode" value="hybrid" checked /> 混合</label>
+            </fieldset>
+            <fieldset><legend>Top-K</legend>
+              <label><input type="checkbox" name="evalTopK" value="2" /> 2</label>
+              <label><input type="checkbox" name="evalTopK" value="4" checked /> 4</label>
+              <label><input type="checkbox" name="evalTopK" value="6" /> 6</label>
+            </fieldset>
+            <fieldset><legend>拒答阈值</legend>
+              <label><input type="checkbox" name="evalThreshold" value="0.55" /> 0.55</label>
+              <label><input type="checkbox" name="evalThreshold" value="0.60" checked /> 0.60</label>
+              <label><input type="checkbox" name="evalThreshold" value="0.65" /> 0.65</label>
+            </fieldset>
+            <div class="eval-run-options">
+              <label class="switch-row"><input id="fullGeneration" type="checkbox" /><span>包含答案生成</span></label>
+              <small>关闭时只评测检索和阈值，速度更快。</small>
+              <button id="runEvaluation" class="primary" type="button">开始评测 <span>→</span></button>
+            </div>
+          </div>
+        </section>
+
+        <section class="eval-cases panel">
+          <div class="section-title"><span>06</span><h2>固定测试集</h2><button id="newEvalCase" class="mini-action" type="button">＋ 新建用例</button></div>
+          <div id="evalCaseList" class="eval-case-list"></div>
+        </section>
+
+        <section id="evalResult" class="eval-result result-panel empty">
+          <div class="empty-state">
+            <div class="empty-mark">R</div>
+            <h2>还没有评测报告</h2>
+            <p>选择配置后开始评测，失败用例会给出召回、拒答或引用原因。</p>
+          </div>
+        </section>
+
+        <section class="eval-history panel">
+          <div class="section-title"><span>07</span><h2>评测历史</h2><button id="refreshEvalRuns" class="text-button" type="button">刷新</button></div>
+          <div id="evalRunList" class="eval-run-list"></div>
+        </section>
+      </div>
+    </div>
+
+    <dialog id="documentDialog" class="document-dialog">
+      <div class="dialog-head">
+        <div><p class="eyebrow">KNOWLEDGE DOCUMENT</p><h2 id="dialogTitle">查看文档</h2></div>
+        <button id="closeDocumentDialog" class="icon-button" type="button" aria-label="关闭">×</button>
+      </div>
+      <div class="dialog-grid">
+        <label>文档名称<input id="documentName" type="text" /></label>
+        <label>所属分区<select id="documentSection"></select></label>
+      </div>
+      <label class="content-field">文档内容
+        <textarea id="documentContent" spellcheck="false"></textarea>
+      </label>
+      <p id="documentHelp" class="dialog-help"></p>
+      <div class="dialog-actions">
+        <button id="cancelDocument" class="secondary" type="button">取消</button>
+        <button id="saveDocument" class="primary" type="button">保存并重建索引</button>
+      </div>
+    </dialog>
+    <dialog id="sectionDialog" class="section-dialog">
+      <div class="dialog-head">
+        <div><p class="eyebrow">KNOWLEDGE SECTION</p><h2 id="sectionDialogTitle">新建分区</h2></div>
+        <button id="closeSectionDialog" class="icon-button" type="button" aria-label="关闭分区窗口">×</button>
+      </div>
+      <label class="section-name-field">分区名称<input id="sectionNameInput" type="text" maxlength="40" placeholder="例如：咖啡配方" /></label>
+      <div class="dialog-actions">
+        <button id="cancelSection" class="secondary" type="button">取消</button>
+        <button id="saveSection" class="primary" type="button">保存分区</button>
+      </div>
+    </dialog>
+    <dialog id="evalCaseDialog" class="eval-case-dialog">
+      <div class="dialog-head">
+        <div><p class="eyebrow">EVALUATION CASE</p><h2 id="evalCaseDialogTitle">新建评测用例</h2></div>
+        <button id="closeEvalCaseDialog" class="icon-button" type="button" aria-label="关闭评测用例窗口">×</button>
+      </div>
+      <div class="eval-case-form">
+        <label class="wide-field">问题<textarea id="evalQuestion" rows="3" placeholder="例如：深度烘焙豆应该怎么调整研磨度？"></textarea></label>
+        <label>预期行为<select id="evalShouldAnswer"><option value="true">应该回答</option><option value="false">应该拒答</option></select></label>
+        <label>检索分区<select id="evalSection"><option value="all">全部分区</option></select></label>
+        <label class="wide-field">预期来源<input id="evalSources" type="text" placeholder="用逗号分隔，例如：研磨, 拿铁制作" /></label>
+        <label class="wide-field">答案要点<input id="evalTerms" type="text" placeholder="用逗号分隔，例如：调细, 调粗" /></label>
+        <label class="wide-field">备注<input id="evalNote" type="text" placeholder="这条用例要验证什么？" /></label>
+        <label class="switch-row wide-field"><input id="evalEnabled" type="checkbox" checked /><span>启用该用例</span></label>
+      </div>
+      <div class="dialog-actions">
+        <button id="deleteEvalCase" class="danger-button hidden" type="button">删除</button>
+        <button id="cancelEvalCase" class="secondary" type="button">取消</button>
+        <button id="saveEvalCase" class="primary" type="button">保存用例</button>
+      </div>
+    </dialog>
+    <script src="/app.js"></script>
+  </body>
+</html>

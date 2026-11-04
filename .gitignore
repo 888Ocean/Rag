@@ -1,0 +1,10 @@
+.env
+.DS_Store
+__pycache__/
+.storage/
+data/
+eval/runs/
+models/
+minirag/
+.venv/
+logs/*.jsonl
