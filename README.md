@@ -39,9 +39,10 @@ DATA_DIR=/absolute/path/to/data
 ```
 
 Set `OMLX_MODEL` to an ID returned by your local OMLX-compatible server.
-The embedding model can be a Hugging Face ID or a local model path. Add
-your own documents through the web interface; local documents and generated
-evaluation runs are not included in the repository.
+The embedding model can be a Hugging Face ID or a local model path. Six
+sample coffee documents are included in `data/`. Add your own documents
+through the web interface; other local documents and generated evaluation
+runs are not included in the repository.
 
 ## Evaluation center
 

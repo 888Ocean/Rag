@@ -2,7 +2,13 @@
 .DS_Store
 __pycache__/
 .storage/
-data/
+data/*
+!data/橙C百香果美式制作
+!data/咖啡.md
+!data/美式气泡水制作
+!data/拿铁制作
+!data/清洗
+!data/研磨
 eval/runs/
 models/
 minirag/
